@@ -1,0 +1,57 @@
+code_examples:
+  1:
+    question: Найти максимальный элемент в списке
+    answer: |
+      Для поиска максимального элемента в списке можно использовать:
+      
+      def find_max(lst):
+         return max(lst) if lst else None
+      
+      Функция возвращает максимальный элемент или None для пустого списка.
+
+  2:
+    question: Проверить, является ли строка палиндромом
+    answer: |
+      Чтобы проверить является ли строка палиндромом можно использовать следующую функцию:
+      
+      def is_palindrome(s):   
+         cleaned = ''.join(ch.lower() for ch in s if ch.isalnum())
+         return cleaned == cleaned[::-1]
+      
+      Пусть s - передаваемая строка, функция проверяет каждый символ на предмет принадлежности к цифрам или буквам и записывает их в нижнем регистре.
+      Если полученная строка равна сама себе в обратном прочтении то s - палиндром.
+  3:
+    question: Объединить два словаря
+    answer: |
+      Для объединения двух словарей:
+      
+      def merge_dicts(dict1, dict2):
+         result = dict1.copy()
+         result.update(dict2)
+         return result
+      
+      При совпадении ключей значения из dict2 перезапишут значения из dict1.
+  4:
+    question: Проверить, является ли число простым
+    answer: |
+      Проверка на простое число:
+      
+      def is_prime(n):
+         if n < 2:
+            return False
+         for i in range(2, int(n**0.5) + 1):
+            if n % i == 0:
+               return False
+         return True
+      
+      Проверяем делители до квадратного корня из числа.
+  5:
+    question: Посчитать количество строк в файле
+    answer: |
+      Подсчет строк в файле:
+
+      def count_lines(filename):
+         with open(filename, 'r', encoding='utf-8') as f:
+            return len(f.readlines())
+
+      Открываем файл в режиме чтения и считаем строки.
