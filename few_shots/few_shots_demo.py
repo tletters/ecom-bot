@@ -1,8 +1,6 @@
 import os
 import yaml
 from dotenv import load_dotenv
-from langchain_community.vectorstores import Chroma
-from langchain_core.example_selectors import SemanticSimilarityExampleSelector
 from langchain_core.prompts import PromptTemplate, FewShotPromptTemplate
 from langchain_openai import ChatOpenAI
 
