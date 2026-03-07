@@ -2,7 +2,7 @@ import os
 import uuid
 from typing import Optional
 
-from app_lc import CliBot, Reply, system_prompt, STYLE, system_prompt
+from app_lc import CliBot, Reply, STYLE, system_prompt
 system_prompt += f""" 
 Выдай в ответе answer: {STYLE['format']['fields']['answer']}, tone: {STYLE['format']['fields']['tone']} и actions: {STYLE['format']['fields']['tone']}."""
 

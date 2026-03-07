@@ -79,6 +79,10 @@ class CliBot:
             temperature=0.7,
             request_timeout=15,
         )
+        self.chat_model = ChatOllama(
+            model="llama3.1:8b",
+            temperature=0.7,
+        )
         self.structured_model = self.chat_model.with_structured_output(Reply)
         self.orders = self.load_orders()
         self.store = {}
