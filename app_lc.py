@@ -3,13 +3,33 @@ import json
 import logging
 import os
 from pathlib import Path
+from typing import List, Optional
+
+import yaml
 from dotenv import load_dotenv
+from pydantic import BaseModel
+from langchain_ollama import ChatOllama
+
 load_dotenv()
 
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.chat_history import InMemoryChatMessageHistory
 from langchain_core.runnables.history import RunnableWithMessageHistory
 from langchain_openai import ChatOpenAI
+from langchain_ollama import ChatOllama
+
+BASE = Path(__file__).parent
+style_file_path = BASE / "data" / "style_guide.yaml"
+
+with open(style_file_path, 'r', encoding='utf-8') as f:
+    STYLE = yaml.safe_load(f)
+
+system_prompt = f"""
+Ты полезный ассистент поддержки магазина {os.getenv('BRAND_NAME')}. 
+Используй следующий тон разговора: {STYLE['tone']['persona']}.
+Избегай в ответах: {STYLE['tone']['avoid']}. Ответ должен содержать: {STYLE['tone']['must_include']}.
+Если у тебя нет информации для ответа отвечай: {STYLE['fallback']['no_data']}
+"""
 
 
 class JSONLFormatter(logging.Formatter):
@@ -44,15 +64,26 @@ class JSONLFormatter(logging.Formatter):
 
         return json.dumps(log_obj, ensure_ascii=False)
 
+class Reply(BaseModel):
+    answer: str
+    actions: List[str]
+    tone: str
+
 class CliBot:
-    def __init__(self, model_name, system_prompt="Ты полезный ассистент."):
+    def __init__(self, model_name, system_prompt=system_prompt):
+        self.current_dir = Path(__file__)
         Path("logs").mkdir(exist_ok=True)
         full_system_prompt = self.create_full_system_prompt(system_prompt)
-        self.chat_model = ChatOpenAI(
-            model_name=model_name,
+        # self.chat_model = ChatOpenAI(
+        #     model_name=model_name,
+        #     temperature=0.7,
+        #     request_timeout=15,
+        # )
+        self.chat_model = ChatOllama(
+            model="llama3.1:8b",
             temperature=0.7,
-            request_timeout=15,
         )
+        self.structured_model = self.chat_model.with_structured_output(Reply)
         self.orders = self.load_orders()
         self.store = {}
         self.prompt = ChatPromptTemplate.from_messages([
@@ -61,6 +92,7 @@ class CliBot:
             ("human", "{question}"),
         ])
         self.chain = self.prompt | self.chat_model
+        self.structured_chain = self.prompt | self.structured_model
         self.chain_with_history = RunnableWithMessageHistory(
             self.chain,
             self.get_session_history,
@@ -80,16 +112,29 @@ class CliBot:
         return f'{system_prompt}\n\n{faq_base}'
 
     def load_faq(self):
-        faq_path = Path('data/faq.json')
+
+        faq_path = self.current_dir.parent / 'data' / 'faq.json'
         with open(faq_path, 'r', encoding='utf-8') as f:
             faq_data = json.load(f)
         return faq_data
 
     def load_orders(self):
-        orders_path = Path('data/orders.json')
+        orders_path = self.current_dir.parent / 'data' / 'orders.json'
         with open(orders_path, 'r', encoding='utf-8') as f:
             orders_data = json.load(f)
         return orders_data
+
+    def ask_structured(self, question: str, session_id: str) -> Optional[Reply]:
+        history = self.get_session_history(session_id)
+        config = {"configurable": {"session_id": session_id}}
+        response = self.structured_chain.invoke(
+            {"question": question, 'history': history.messages},
+            config=config
+        )
+        history.add_user_message(question)
+        history.add_ai_message(response.answer)
+        return response
+
 
     def get_session_history(self, session_id: str):
         if session_id not in self.store:
@@ -118,18 +163,21 @@ class CliBot:
 
     def __call__(self, session_id):
         logger = self.setup_session_logging(session_id)
-        print("Чат-бот запущен! Можете задавать вопросы. \n - Для выхода введите 'выход'.\n - Для очистки контекста введите 'сброс'.\n")
-        logging.info("=== New session ===")
+        print(
+            "Чат-бот запущен! Можете задавать вопросы. \n - Для выхода введите 'выход'.\n - Для очистки контекста введите 'сброс'.\n")
+
         while True:
             try:
                 user_text = input("Вы: ").strip()
             except (KeyboardInterrupt, EOFError):
                 print("\nБот: Завершение работы.")
                 break
+
             if not user_text:
                 continue
-            logging.info(f"User: {user_text}")
+
             msg = user_text.lower()
+
             if msg in ("выход", "стоп", "конец"):
                 print("Бот: До свидания!")
                 logger.info('Session ended', extra={
@@ -137,6 +185,7 @@ class CliBot:
                     'session_id': session_id
                 })
                 break
+
             if msg.startswith('/order'):
                 if len(msg.split()) < 2:
                     print('Не передан order_id')
@@ -147,39 +196,25 @@ class CliBot:
                 else:
                     print('Не найден передаваемый order_id')
                 continue
-            try:
-                responce = self.chain_with_history.invoke(
-                    {"question": user_text},
-                    {"configurable": {"session_id": session_id}}
-                )
-            except Exception as e:
-                error_msg = f"Извините, произошла ошибка при обработке запроса. Пожалуйста, попробуйте снова."
-                print(f"\nБот: {error_msg}")
 
-                logger.error(f"LLM processing error: {e}", extra={
-                    'type': 'llm_error',
+            # Получаем структурированный ответ
+            response = self.chain_with_history.invoke(
+                {"question": user_text},
+                {"configurable": {"session_id": session_id}}
+            )
+
+            if response:
+                bot_reply = response.content
+                print('Бот:', bot_reply, "\n")
+                logger.info('Chat interaction', extra={
+                    'type': 'chat_interaction',
                     'user_input': msg,
-                    'error': str(e),
+                    'bot_response': bot_reply,
                     'session_id': session_id
                 })
-            usage_info = {}
-            if hasattr(responce, 'usage_metadata'):
-                usage_info = {
-                    "prompt_tokens": responce.usage_metadata.get('input_tokens', 0),
-                    "completion_tokens": responce.usage_metadata.get('output_tokens', 0),
-                    "total_tokens": responce.usage_metadata.get('total_tokens', 0)
-                }
-            bot_reply = responce.content.strip()
-            print('Бот:', bot_reply, "\n")
-            logger.info('Chat interaction', extra={
-                'type': 'chat_interaction',
-                'user_input': msg,
-                'bot_response': bot_reply,
-                'usage': usage_info,
-                'session_id': session_id
-            })
+            else:
+                print('Бот: Извините, произошла ошибка при обработке запроса.')
 
 if __name__ == "__main__":
-    system_prompt = f'''Ты полезный ассистент поддержки магазина {os.getenv('BRAND_NAME')}. Отвечай кратко и по существу.'''
-    bot = CliBot(model_name=os.getenv("OPENAI_API_MODEL", "gpt-5"), system_prompt=system_prompt)
+    bot = CliBot(model_name=os.getenv("OPENAI_API_MODEL", "gpt-5"))
     bot("user_1231")
