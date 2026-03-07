@@ -74,14 +74,10 @@ class CliBot:
         self.current_dir = Path(__file__)
         Path("logs").mkdir(exist_ok=True)
         full_system_prompt = self.create_full_system_prompt(system_prompt)
-        # self.chat_model = ChatOpenAI(
-        #     model_name=model_name,
-        #     temperature=0.7,
-        #     request_timeout=15,
-        # )
-        self.chat_model = ChatOllama(
-            model="llama3.1:8b",
+        self.chat_model = ChatOpenAI(
+            model_name=model_name,
             temperature=0.7,
+            request_timeout=15,
         )
         self.structured_model = self.chat_model.with_structured_output(Reply)
         self.orders = self.load_orders()

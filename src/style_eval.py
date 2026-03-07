@@ -1,8 +1,6 @@
-import os, json, pathlib, re, statistics
-import time
+import os, json, re, statistics
 from typing import List
 from dotenv import load_dotenv
-from langchain_ollama import ChatOllama
 from pydantic import BaseModel, Field
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
@@ -28,16 +26,12 @@ def rule_checks(text: str) -> int:
         score -= 10
     return max(score, 0)
 
-# LLM-оценка
 class Grade(BaseModel):
     score: int = Field(..., ge=0, le=100)
     notes: str
 
-#LLM = ChatOpenAI(model=os.getenv("OPENAI_API_MODEL","gpt-4o-mini"), temperature=0)
-LLM = ChatOllama(
-            model="llama3.1:8b",
-            temperature=0.7,
-        )
+LLM = ChatOpenAI(model=os.getenv("OPENAI_API_MODEL","gpt-4o-mini"), temperature=0)
+
 
 GRADE_PROMPT = ChatPromptTemplate.from_messages([
     ("system", f"Ты — строгий ревьюер соответствия голосу бренда {STYLE['brand']}"),
